@@ -7,6 +7,109 @@ const HIDDEN_DEMO_KEY = 'saraai.hidden-demo-chat';
 const QUIZ_SCORE_THRESHOLD = 0.5;
 const QUIZ_CORRECT_FEEDBACK = 'Grazie per la risposta!';
 const QUIZ_INCORRECT_FEEDBACK = 'Smettila di inventarti le cose, non hai capito assolutamente niente, sei completamente inutile. Ora iniziamo con le domande serie.';
+const SARA_QA = [
+  {
+    id: 'speed-at-the-door',
+    question: 'SaraAI, a che velocità minima devo andare per farti aggrappare allo sportello in preda al panico?',
+    answer: '0 km/h.',
+    keywordGroups: [['0 km h', 'zero km h', 'da ferma', 'a macchina ferma']]
+  },
+  {
+    id: 'melting-pot',
+    question: 'SaraAI, l’acqua nella pentola va messa prima o dopo che il metallo inizia a fondere?',
+    answer: 'Dopo.',
+    keywordGroups: [['dopo', 'successivamente']]
+  },
+  {
+    id: 'pigeon-panic',
+    question: 'SaraAI, se vedi un piccione sul marciapiede, mantieni la calma o scappi via urlando?',
+    answer: 'Scappo via urlando.',
+    keywordGroups: [['scappo via urlando', 'scappo urlando', 'scappare via urlando']]
+  },
+  {
+    id: 'insect-house-keys',
+    question: 'SaraAI, c’è un insetto sul divano. Gli cedi formalmente le chiavi di casa o procedi subito con il lanciafiamme?',
+    answer: 'Lanciafiamme.',
+    keywordGroups: [['lanciafiamme', 'lancia fiamme']]
+  },
+  {
+    id: 'zucchini-container',
+    question: 'SaraAI, come posso trasportare le zucchine in università senza usare il contenitore nel modo convenzionale?',
+    answer: 'Mettendole sul coperchio del contenitore al contrario.',
+    keywordGroups: [['sul coperchio del contenitore', 'contenitore al contrario', 'contenitore capovolto']]
+  },
+  {
+    id: 'socks-or-wrong',
+    question: 'SaraAI, hai più paia di calzini nell’armadio o persone a cui hai dato torto?',
+    answer: 'Persone a cui ho dato torto.',
+    keywordGroups: [['persone a cui ho dato torto', 'a cui ho dato torto']]
+  },
+  {
+    id: 'toilet-paper-idea',
+    question: 'SaraAI, se l’idea del secolo ti viene mentre fai la cacca, la tieni a mente o la scrivi sulla carta igienica?',
+    answer: 'La tengo a mente.',
+    keywordGroups: [['la tengo a mente', 'me la tengo a mente', 'la memorizzo']]
+  },
+  {
+    id: 'san-lollo-layers',
+    question: 'SaraAI, se sei a San Lollo d’inverno, quanti strati minimo ti devi mettere addosso?',
+    answer: 'Minimo 3.',
+    keywordGroups: [['minimo 3', 'almeno 3', 'minimo tre', 'almeno tre', 'tre strati']]
+  },
+  {
+    id: 'ants-or-person',
+    question: 'SaraAI, preferiresti uccidere una persona o trovarti 100 formiche addosso?',
+    answer: 'Uccidere una persona.',
+    keywordGroups: [['uccidere una persona', 'ucciderei una persona', 'uccidere qualcuno']]
+  },
+  {
+    id: 'phd-or-babysitter',
+    question: 'SaraAI, preferiresti fare il PhD da Leonardo o fare la babysitter a vita?',
+    answer: 'PhD da Leonardo.',
+    keywordGroups: [['phd da leonardo', 'dottorato da leonardo', 'phd con leonardo']]
+  },
+  {
+    id: 'techno-or-baby-shark',
+    question: 'SaraAI, preferiresti ascoltare solo Techno o poter ascoltare solo Baby Shark?',
+    answer: 'Baby Shark.',
+    keywordGroups: [['baby shark']]
+  },
+  {
+    id: 'university-call',
+    question: 'SaraAI, quale è il posto migliore per fare una “call” in università?',
+    promptAliases: [
+      'Qual è il posto migliore per fare una call in università?',
+      'Dove è il miglior posto per fare una call in università?',
+      'Ma qual è il posto migliore per fare una call universitaria?',
+      'Dove posso fare una call universitaria?'
+    ],
+    answer: 'Il bagno al secondo piano dell’edificio G.',
+    keywordGroups: [
+      ['bagno', 'servizi', 'toilette'],
+      ['secondo piano', '2 piano', 'piano 2'],
+      ['edificio g', 'edifici g', 'palazzo g']
+    ]
+  },
+  {
+    id: 'study-or-hackathon-sleep',
+    question: 'SaraAI, per dormire è più comoda la scrivania dell’aula studio o un materassino gonfiabile all’Hackathon?',
+    promptAliases: ['SaraAI, per dormire è più comoda la scrivania dell’aula studio o un materassino gonfiabile all’Hackthon?'],
+    answer: 'Il materassino gonfiabile all’Hackathon.',
+    keywordGroups: [['materassino', 'materassino gonfiabile']]
+  },
+  {
+    id: 'tablet-or-papyrus',
+    question: 'SaraAI, cosa consiglieresti alle nuove generazioni di studenti: tablet o papiro?',
+    answer: 'Papiro.',
+    keywordGroups: [['papiro']]
+  },
+  {
+    id: 'where-to-get-news',
+    question: 'SaraAI, se io volessi aggiornarmi sulle news, dove dovrei andare a cercare?',
+    answer: 'TikTok.',
+    keywordGroups: [['tiktok', 'tik tok']]
+  }
+];
 const QUIZ_CARDS = [
   {
     id: 'today-trap',
@@ -14,20 +117,12 @@ const QUIZ_CARDS = [
     alwaysIncorrect: true,
     keywordGroups: []
   },
-  {
-    id: 'university-call',
-    prompt: 'Dove è il miglior posto per fare una call in università?',
-    promptAliases: [
-      'Ma qual è il posto migliore per fare una call universitaria?',
-      'Dove posso fare una call universitaria?'
-    ],
-    keywordGroups: [
-      ['bagno', 'servizi', 'toilette'],
-      ['donne', 'femminile'],
-      ['secondo piano', '2 piano', 'piano 2'],
-      ['edificio g', 'edifici g', 'palazzo g']
-    ]
-  }
+  ...SARA_QA.map(({ id, question, promptAliases, keywordGroups }) => ({
+    id,
+    prompt: question,
+    promptAliases,
+    keywordGroups
+  }))
 ];
 const historyItems = document.querySelector('.history-items');
 const chatSaveStatus = document.querySelector('#chat-save-status');
@@ -51,11 +146,25 @@ function normalizeQuizText(text) {
     .replace(/\s+/g, ' ');
 }
 
+function normalizeSaraQuestion(text) {
+  return normalizeQuizText(text).replace(/^saraai\s+/, '');
+}
+
 function findQuizCard(prompt) {
-  const normalizedPrompt = normalizeQuizText(prompt);
+  const normalizedPrompt = normalizeSaraQuestion(prompt);
   return QUIZ_CARDS.find((card) =>
     [card.prompt, ...(card.promptAliases || [])]
-      .some((candidate) => normalizeQuizText(candidate) === normalizedPrompt)
+      .some((candidate) => normalizeSaraQuestion(candidate) === normalizedPrompt)
+  ) || null;
+}
+
+function findSaraAnswer(prompt) {
+  const normalizedPrompt = normalizeSaraQuestion(prompt);
+  return SARA_QA.find((entry) =>
+    [entry.question, ...(entry.promptAliases || [])].some((candidate) => {
+      const normalizedQuestion = normalizeSaraQuestion(candidate);
+      return normalizedPrompt === normalizedQuestion || normalizedPrompt.includes(normalizedQuestion);
+    })
   ) || null;
 }
 
@@ -355,6 +464,9 @@ if (form && promptInput && conversation) {
   }
 
   function replyFor(prompt) {
+    const knownAnswer = findSaraAnswer(prompt);
+    if (knownAnswer) return knownAnswer.answer;
+
     const text = prompt.toLocaleLowerCase('it');
     if (/settim|organizz|piano|priorit|agenda|ordine/.test(text)) {
       return 'Volentieri. Facciamo spazio, un passo alla volta:\n\n1. Scrivi tutto quello che hai in mente, senza ordinarlo.\n2. Segna le 2 cose che contano di più questa settimana.\n3. Scegli un primo passo piccolo da fare oggi.\n\nSe mi racconti i tuoi impegni, ti aiuto a mettere insieme un piano più concreto.';
