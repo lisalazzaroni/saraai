@@ -146,6 +146,8 @@ let activeQuizCardId = null;
 let unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
 let positiveFeedbackDeck = [];
 let negativeFeedbackDeck = [];
+const POSITIVE_FEEDBACK_STORAGE_KEY = 'saraai.quiz-positive-feedback';
+const NEGATIVE_FEEDBACK_STORAGE_KEY = 'saraai.quiz-negative-feedback';
 const defaultPromptPlaceholder = promptInput?.placeholder || 'Chiedimi quello che vuoi…';
 const promptLabel = document.querySelector('label[for="prompt"]');
 const defaultPromptLabel = promptLabel?.textContent || 'Scrivi un messaggio a SaraAI';
@@ -217,19 +219,35 @@ function shuffleItems(items) {
 
 function takeQuizFeedback(isCorrect) {
   const phrases = isCorrect ? QUIZ_CORRECT_FEEDBACK : QUIZ_INCORRECT_FEEDBACK;
+  const storageKey = isCorrect ? POSITIVE_FEEDBACK_STORAGE_KEY : NEGATIVE_FEEDBACK_STORAGE_KEY;
   let deck = isCorrect ? positiveFeedbackDeck : negativeFeedbackDeck;
-  if (deck.length === 0) deck = shuffleItems(phrases);
-  const feedback = deck.pop();
+  if (deck.length === 0) {
+    try {
+      const savedDeck = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null');
+      const validSavedDeck = Array.isArray(savedDeck)
+        && savedDeck.length > 0
+        && new Set(savedDeck).size === savedDeck.length
+        && savedDeck.every((phrase) => phrases.includes(phrase));
+      deck = validSavedDeck ? savedDeck : shuffleItems(phrases);
+    } catch {
+      deck = shuffleItems(phrases);
+    }
+  }
+
+  const feedback = deck.shift();
   if (isCorrect) positiveFeedbackDeck = deck;
   else negativeFeedbackDeck = deck;
+  try {
+    window.sessionStorage.setItem(storageKey, JSON.stringify(deck));
+  } catch {
+    // The shuffled deck remains active until this page is closed.
+  }
   return feedback;
 }
 
 function resetUltracodeQuiz() {
   activeQuizCardId = null;
   unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
-  positiveFeedbackDeck = [];
-  negativeFeedbackDeck = [];
 }
 
 function setAwaitingManualUltracodeReply(awaiting) {
