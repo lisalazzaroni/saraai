@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f7f5" />
+    <meta name="description" content="SaraAI: uno spazio semplice per trasformare idee, domande e progetti in qualcosa di concreto." />
+    <title>SaraAI — Un'idea alla volta</title>
+    <link rel="stylesheet" href="styles.css?v=20261015-9" />
+    <script src="script.js?v=20261015-15" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Vai al contenuto</a>
+    <aside class="chat-sidebar" id="chat-sidebar" aria-label="Navigazione e chat recenti">
+      <div class="sidebar-top">
+        <a class="sidebar-brand" href="index.html#top" aria-label="SaraAI, pagina iniziale">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <span>Sara<span class="brand-ai">AI</span></span>
+        </a>
+        <button class="sidebar-close" type="button" aria-label="Chiudi barra laterale">×</button>
+      </div>
+      <a class="sidebar-new-chat" href="index.html#chat"><span aria-hidden="true">＋</span> Nuova chat</a>
+      <nav class="sidebar-shortcuts" aria-label="Esplora il sito">
+        <span class="sidebar-label">Esplora</span>
+        <a href="index.html#idee">Idee</a>
+        <a href="index.html#come-funziona">Come funziona</a>
+      </nav>
+      <div class="sidebar-history">
+        <p class="sidebar-label">Chat passate</p>
+        <div class="history-items">
+          <div class="history-entry" data-demo-history>
+            <a class="history-link" href="chat.html">
+              <span class="history-title">Il miglior ristorante di Roma?</span>
+              <span class="history-snippet"><b>Tu:</b> Mi puoi dire il miglior ristorante di Roma?</span>
+              <span class="history-snippet"><b>SaraAI:</b> Il Ristorante Roma.</span>
+            </a>
+            <button class="history-delete" type="button" data-delete-demo aria-label="Elimina la chat di esempio" title="Elimina chat">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 3v7m4-7v7" /></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-bottom"><span class="sidebar-status-dot"></span> Prototipo locale</div>
+    </aside>
+    <button class="sidebar-backdrop" type="button" aria-label="Chiudi barra laterale"></button>
+    <div class="app-main">
+    <header class="site-header">
+      <button class="sidebar-toggle" type="button" id="sidebar-toggle" aria-label="Apri barra laterale" aria-controls="chat-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
+      <a class="brand" href="index.html#top" aria-label="SaraAI, pagina iniziale">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Sara<span class="brand-ai">AI</span></span>
+      </a>
+      <nav class="main-nav" aria-label="Navigazione principale">
+        <a href="#idee">Idee</a>
+        <a href="#come-funziona">Come funziona</a>
+      </nav>
+      <a class="header-cta" href="#chat">Parliamone <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-kicker"><span class="status-dot"></span> IL TUO SPAZIO PER LE IDEE</div>
+        <h1 id="hero-title">Ciao, sono Sara.<br /><span>Dimmi la tua opinione ma carcola che è sbagliata</span></h1>
+        <p class="hero-copy">Con tutto il rispetto, so già tutto. Ma tu chiedimi pure quello che vuoi<br class="desktop-break" /> </p>
+
+        <div class="chat-shell" id="chat">
+          <div class="conversation" id="conversation" aria-live="polite" aria-label="Conversazione con SaraAI" hidden></div>
+          <form class="composer" id="chat-form">
+            <label class="visually-hidden" for="prompt">Scrivi un messaggio a SaraAI</label>
+            <textarea id="prompt" rows="1" maxlength="600" placeholder="Chiedimi quello che vuoi…" required></textarea>
+            <div class="composer-bottom">
+              <div class="composer-options">
+                <span class="composer-note"><span class="sparkle" aria-hidden="true">✳</span> Qui ogni idea può iniziare</span>
+                <label class="ultracode-control" for="ultracode-toggle">
+                  <input id="ultracode-toggle" type="checkbox" role="switch" aria-describedby="ultracode-description" />
+                  <span class="ultracode-track" aria-hidden="true"></span>
+                  <span>Ultracode</span>
+                  <span class="ultracode-caption">risposte manuali</span>
+                </label>
+                <span class="visually-hidden" id="ultracode-description">Quando è attivo, scrivi una domanda e poi la risposta di SaraAI. Le domande del quiz vengono valutate e la successiva viene inviata automaticamente.</span>
+              </div>
+              <button class="send-button" type="submit" aria-label="Invia messaggio">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+              </button>
+            </div>
+          </form>
+          <p class="demo-note"><span class="demo-indicator"></span> Prototipo locale · chat salvate nel browser</p>
+          <p class="chat-save-status" id="chat-save-status" role="status" aria-live="polite" hidden>Chat salvata in Chat passate</p>
+        </div>
+
+        <div class="suggestions" aria-label="Spunti per iniziare">
+          <button type="button" class="suggestion" data-prompt="Aiutami a organizzare meglio la mia settimana"><span aria-hidden="true">◷</span> Pianifica tutte le cose che mi dimenticherò di fare </button>
+          <button type="button" class="suggestion" data-prompt="Spiegami un argomento difficile in modo semplice"><span aria-hidden="true">✳</span> Come spiegare all'arbitro che la palla era dentro</button>
+          <button type="button" class="suggestion" data-prompt="Aiutami a trovare le parole giuste per una mail"><span aria-hidden="true">↗</span> Scrivi una mail di scuse per aver cancellato la repo a Masi </button>
+        </div>
+        <div class="scroll-cue" aria-hidden="true"><span></span> Scopri SaraAI</div>
+      </section>
+
+      <section class="ideas-section" id="idee" aria-labelledby="ideas-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">UN BUON PUNTO DI PARTENZA</p>
+            <h2 id="ideas-title">A volte basta<br />la domanda giusta.</h2>
+          </div>
+          <p class="section-intro">Piccole cose da fare insieme. Scegli uno spunto e continuiamo da lì.</p>
+        </div>
+
+        <div class="idea-grid">
+          <button class="idea-card card-peach" type="button" data-prompt="Ho tante cose da fare, aiutami a mettere ordine e preparare un piano semplice">
+            <span class="card-index">01 — ORGANIZZARE</span>
+            <span class="idea-illustration illustration-calendar" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span>
+            <span class="idea-title">Pisolini sul tavolo<br />durante la giornata</span>
+            <span class="card-arrow" aria-hidden="true">↗</span>
+          </button>
+          <button class="idea-card card-blue" type="button" data-prompt="Vorrei capire meglio un argomento che trovo complicato. Puoi spiegarmelo con un esempio semplice?">
+            <span class="card-index">02 — IMPARARE</span>
+            <span class="idea-illustration illustration-orbit" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span class="idea-title">Capire una cosa<br />difficile, con poca calma</span>
+            <span class="card-arrow" aria-hidden="true">↗</span>
+          </button>
+          <button class="idea-card card-lilac" type="button" data-prompt="Ho un'idea ma non so come raccontarla. Mi aiuti a trasformarla in un testo chiaro?">
+            <span class="card-index">03 — CREARE</span>
+            <span class="idea-illustration illustration-notes" aria-hidden="true"><span>ciao!</span><i></i><i></i><i></i></span>
+            <span class="idea-title">Scaricare un nuovo paper<br />senza leggerlo</span>
+            <span class="card-arrow" aria-hidden="true">↗</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="how-section" id="come-funziona" aria-labelledby="how-title">
+        <div class="how-stamp" aria-hidden="true"><span>s</span><i></i><i></i><i></i></div>
+        <div class="how-content">
+          <p class="eyebrow">SEMPLICE, COME INCIAMPARE CON GLI UGG</p>
+          <h2 id="how-title">Tu porti l'idea.<br /><span>SaraAI la fa partire (appena si sveglia)</span></h2>
+          <p>Scrivi pure la tua opinione o racconta cosa hai in mente. Sarò estremamente educata nel demolirla. Il primo passo non deve essere perfetto, l'importante è provarci con un bel sorriso, poi i danni li sistemiamo insieme!</p>
+          <a href="#chat" class="text-link">Fai una domanda <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="index.html#top" aria-label="SaraAI, torna all'inizio">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Sara<span class="brand-ai">AI</span></span>
+      </a>
+      <p>Un'idea alla volta<span class="footer-sparkle"> ✳</span></p>
+      <span class="footer-caption">Demo locale · Nessun dato viene inviato ad Israele</span>
+    </footer>
+    </div>
+  </body>
+</html>
