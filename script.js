@@ -179,7 +179,7 @@ const DEMO_CHATS = [
       { role: 'user', text: 'Se i Romani avessero avuto il Wi-Fi, avrebbero conquistato anche il router?' },
       { role: 'assistant', text: 'Sì, ma prima avrebbero costruito una strada fino al modem.' },
       { role: 'user', text: 'E la password?' },
-      { role: 'assistant', text: 'SPQR, con maiuscole e rispetto.' }
+      { role: 'assistant', text: 'SPQR, con maiuscole e DAJE ROMA DAJE.' }
     ]
   }
 ];
