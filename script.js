@@ -3,7 +3,7 @@ const promptInput = document.querySelector('#prompt');
 const conversation = document.querySelector('#conversation');
 const ultracodeToggle = document.querySelector('#ultracode-toggle');
 const HISTORY_STORAGE_KEY = 'saraai.chat-history';
-const HIDDEN_DEMO_KEY = 'saraai.hidden-demo-chat';
+const HIDDEN_DEMO_KEY = 'saraai.hidden-demo-chats';
 const QUIZ_SCORE_THRESHOLD = 0.5;
 const QUIZ_CORRECT_FEEDBACK = [
   'Grazie per la risposta!',
@@ -18,7 +18,7 @@ const QUIZ_CORRECT_FEEDBACK = [
 const QUIZ_INCORRECT_FEEDBACK = [
   'Smettila di inventarti le cose, non hai capito assolutamente niente, sei completamente inutile.',
   'No. Questa risposta è così sbagliata che la domanda si è offesa.',
-  'Non proprio. Hai ascoltato la domanda o stavi pensando alle zucchine?',
+  'Non proprio. Hai ascoltato la domanda o stavi pensando alle fatine?',
   'Risposta errata. Riprova: magari questa volta la fortuna ti nota.',
   'No, per niente. Persino il piccione sul marciapiede aveva capito.',
   'Sbagliato. Ho visto previsioni meteo più precise.',
@@ -30,7 +30,7 @@ const SARA_QA = [
     id: 'speed-at-the-door',
     question: 'SaraAI, a che velocità minima devo andare per farti aggrappare allo sportello in preda al panico?',
     answer: '0 km/h.',
-    keywordGroups: [['0 km h', 'zero km h', 'da ferma', 'a macchina ferma']]
+    keywordGroups: [['0 km h', 'zero km h', 'da ferma', 'a macchina ferma', '0' ]]
   },
   {
     id: 'melting-pot',
@@ -42,7 +42,7 @@ const SARA_QA = [
     id: 'pigeon-panic',
     question: 'SaraAI, se vedi un piccione sul marciapiede, mantieni la calma o scappi via urlando?',
     answer: 'Scappo via urlando.',
-    keywordGroups: [['scappo via urlando', 'scappo urlando', 'scappare via urlando']]
+    keywordGroups: [['scappo via urlando', 'scappo urlando', 'scappare via urlando', 'scappo via']]
   },
   {
     id: 'insect-house-keys',
@@ -72,7 +72,7 @@ const SARA_QA = [
     id: 'san-lollo-layers',
     question: 'SaraAI, se sei a San Lollo d’inverno, quanti strati minimo ti devi mettere addosso?',
     answer: 'Minimo 3.',
-    keywordGroups: [['minimo 3', 'almeno 3', 'minimo tre', 'almeno tre', 'tre strati']]
+    keywordGroups: [['minimo 3', 'almeno 3', 'minimo tre', 'almeno tre', 'tre strati', '3']]
   },
   {
     id: 'ants-or-person',
@@ -136,16 +136,67 @@ const QUIZ_CARDS = [
     keywordGroups
   }))
 ];
+const DEMO_CHATS = [
+  {
+    id: 'roma-restaurant',
+    title: 'Il miglior ristorante di Roma?',
+    summary: 'Una richiesta semplice, un consiglio fin troppo letterale.',
+    turns: [
+      { role: 'user', text: 'Mi puoi dire il miglior ristorante di Roma?' },
+      { role: 'assistant', text: 'Certo: il Ristorante Roma.' },
+      { role: 'user', text: 'Dove si trova?' },
+      { role: 'assistant', text: 'A Roma. Il nome era un indizio.' },
+      { role: 'user', text: 'Sei stata utilissima.' },
+      { role: 'assistant', text: 'Lo so. Prenoto per due?' }
+    ]
+  },
+  {
+    id: 'pigeon-meeting',
+    title: 'Il piccione mi sta fissando',
+    summary: 'Un incontro ravvicinato con un professionista del marciapiede.',
+    turns: [
+      { role: 'user', text: 'C’è un piccione che mi guarda male. Che faccio?' },
+      { role: 'assistant', text: 'Mantieni la calma e non stabilire un contatto visivo.' },
+      { role: 'user', text: 'Mi sta seguendo.' },
+      { role: 'assistant', text: 'Cammina con decisione. Probabilmente ha una riunione.' }
+    ]
+  },
+  {
+    id: 'zucchini-logistics',
+    title: 'Trasporto zucchine: piano logistico',
+    summary: 'Una soluzione tecnica al problema del contenitore.',
+    turns: [
+      { role: 'user', text: 'Come porto le zucchine in università senza usare il contenitore normalmente?' },
+      { role: 'assistant', text: 'Metti il contenitore al contrario.' },
+      { role: 'user', text: 'E le zucchine dove vanno?' },
+      { role: 'assistant', text: 'Sul coperchio. Avevi chiesto una soluzione, non la praticità.' }
+    ]
+  },
+  {
+    id: 'hackathon-sleep',
+    title: 'Dove dormire all’Hackathon?',
+    summary: 'Consigli per riposare con standard decisamente universitari.',
+    turns: [
+      { role: 'user', text: 'Meglio dormire alla scrivania dell’aula studio o al Hackathon?' },
+      { role: 'assistant', text: 'Sul materassino gonfiabile all’Hackathon.' },
+      { role: 'user', text: 'E se non c’è posto?' },
+      { role: 'assistant', text: 'Allora la scrivania. Non sono un’agenzia immobiliare.' }
+    ]
+  }
+];
 const historyItems = document.querySelector('.history-items');
 const chatSaveStatus = document.querySelector('#chat-save-status');
-const selectedChatId = new URLSearchParams(window.location.search).get('chat');
+const pageSearchParams = new URLSearchParams(window.location.search);
+const selectedChatId = pageSearchParams.get('chat');
+const selectedDemoId = pageSearchParams.get('demo')
+  || (document.querySelector('#archive-transcript') && !selectedChatId ? 'roma-restaurant' : null);
 let activeChatId = document.querySelector('#archive-transcript') ? selectedChatId : null;
 let isReplyPending = false;
 let awaitingManualUltracodeReply = false;
 let activeQuizCardId = null;
 let unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
-let positiveFeedbackDeck = [];
-let negativeFeedbackDeck = [];
+let positiveFeedbackState = null;
+let negativeFeedbackState = null;
 const POSITIVE_FEEDBACK_STORAGE_KEY = 'saraai.quiz-positive-feedback';
 const NEGATIVE_FEEDBACK_STORAGE_KEY = 'saraai.quiz-negative-feedback';
 const defaultPromptPlaceholder = promptInput?.placeholder || 'Chiedimi quello che vuoi…';
@@ -220,27 +271,38 @@ function shuffleItems(items) {
 function takeQuizFeedback(isCorrect) {
   const phrases = isCorrect ? QUIZ_CORRECT_FEEDBACK : QUIZ_INCORRECT_FEEDBACK;
   const storageKey = isCorrect ? POSITIVE_FEEDBACK_STORAGE_KEY : NEGATIVE_FEEDBACK_STORAGE_KEY;
-  let deck = isCorrect ? positiveFeedbackDeck : negativeFeedbackDeck;
-  if (deck.length === 0) {
+  let state = isCorrect ? positiveFeedbackState : negativeFeedbackState;
+  if (!state) {
     try {
-      const savedDeck = JSON.parse(window.sessionStorage.getItem(storageKey) || 'null');
-      const validSavedDeck = Array.isArray(savedDeck)
-        && savedDeck.length > 0
-        && new Set(savedDeck).size === savedDeck.length
-        && savedDeck.every((phrase) => phrases.includes(phrase));
-      deck = validSavedDeck ? savedDeck : shuffleItems(phrases);
+      state = JSON.parse(window.localStorage.getItem(storageKey) || 'null');
     } catch {
-      deck = shuffleItems(phrases);
+      state = null;
     }
   }
 
-  const feedback = deck.shift();
-  if (isCorrect) positiveFeedbackDeck = deck;
-  else negativeFeedbackDeck = deck;
+  const validOrder = Array.isArray(state?.order)
+    && state.order.length === phrases.length
+    && new Set(state.order).size === phrases.length
+    && state.order.every((phrase) => phrases.includes(phrase));
+  let order = validOrder ? state.order : [];
+  let index = validOrder && Number.isInteger(state.nextIndex) ? state.nextIndex : phrases.length;
+
+  if (!validOrder || index >= order.length || index < 0) {
+    order = shuffleItems(phrases);
+    if (state?.last === order[0] && order.length > 1) {
+      [order[0], order[1]] = [order[1], order[0]];
+    }
+    index = 0;
+  }
+
+  const feedback = order[index];
+  const nextState = { order, nextIndex: index + 1, last: feedback };
+  if (isCorrect) positiveFeedbackState = nextState;
+  else negativeFeedbackState = nextState;
   try {
-    window.sessionStorage.setItem(storageKey, JSON.stringify(deck));
+    window.localStorage.setItem(storageKey, JSON.stringify(nextState));
   } catch {
-    // The shuffled deck remains active until this page is closed.
+    // The in-memory rotation remains active if browser storage is unavailable.
   }
   return feedback;
 }
@@ -293,13 +355,44 @@ function addPreviewLine(link, speaker, text) {
 
 function renderHistoryLinks(currentId) {
   if (!historyItems) return;
-  historyItems.querySelectorAll('.history-entry[data-chat-id]').forEach((entry) => entry.remove());
-  const staticEntry = historyItems.querySelector('[data-demo-history]');
-  const staticLink = staticEntry && staticEntry.querySelector('.history-link');
-  if (currentId && staticLink) {
-    staticLink.classList.remove('is-current');
-    staticLink.removeAttribute('aria-current');
-  }
+  historyItems.replaceChildren();
+
+  const hiddenDemoIds = readHiddenDemoIds();
+  DEMO_CHATS.filter((demo) => !hiddenDemoIds.includes(demo.id)).forEach((demo) => {
+    const entry = document.createElement('div');
+    const isCurrent = demo.id === selectedDemoId;
+    entry.className = 'history-entry' + (isCurrent ? ' is-current' : '');
+    entry.dataset.demoId = demo.id;
+
+    const link = document.createElement('a');
+    link.className = 'history-link' + (isCurrent ? ' is-current' : '');
+    link.href = 'chat.html?demo=' + encodeURIComponent(demo.id);
+    link.setAttribute('aria-label', 'Apri chat: ' + demo.title);
+    if (isCurrent) link.setAttribute('aria-current', 'page');
+    const title = document.createElement('span');
+    title.className = 'history-title';
+    title.textContent = demo.title;
+    link.append(title);
+    const lastUser = [...demo.turns].reverse().find((turn) => turn.role === 'user');
+    const lastAssistant = [...demo.turns].reverse().find((turn) => turn.role === 'assistant');
+    if (lastUser) addPreviewLine(link, 'Tu', lastUser.text);
+    if (lastAssistant) addPreviewLine(link, 'SaraAI', lastAssistant.text);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'history-delete';
+    deleteButton.type = 'button';
+    deleteButton.dataset.deleteDemo = demo.id;
+    deleteButton.setAttribute('aria-label', 'Nascondi chat: ' + demo.title);
+    deleteButton.title = 'Nascondi chat';
+    deleteButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 3v7m4-7v7" /></svg>';
+    deleteButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      deleteDemoChat(demo.id);
+    });
+    entry.append(link, deleteButton);
+    historyItems.append(entry);
+  });
 
   readChatHistory()
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
@@ -338,8 +431,7 @@ function renderHistoryLinks(currentId) {
       });
 
       entry.append(link, deleteButton);
-      if (staticEntry) historyItems.insertBefore(entry, staticEntry);
-      else historyItems.append(entry);
+      historyItems.append(entry);
     });
 }
 
@@ -377,49 +469,65 @@ function deleteSavedChat(chatId) {
   renderHistoryLinks(activeChatId);
 }
 
-function deleteDemoChat() {
-  const demoEntry = historyItems && historyItems.querySelector('[data-demo-history]');
-  if (!demoEntry || !window.confirm('Eliminare la chat di esempio?')) return;
+function readHiddenDemoIds() {
   try {
-    window.localStorage.setItem(HIDDEN_DEMO_KEY, '1');
+    const hiddenIds = JSON.parse(window.localStorage.getItem(HIDDEN_DEMO_KEY) || '[]');
+    return Array.isArray(hiddenIds) ? hiddenIds.filter((id) => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function deleteDemoChat(demoId) {
+  const demo = DEMO_CHATS.find((item) => item.id === demoId);
+  if (!demo || !window.confirm('Nascondere la chat «' + demo.title + '»?')) return;
+  const hiddenIds = readHiddenDemoIds();
+  if (!hiddenIds.includes(demoId)) hiddenIds.push(demoId);
+  try {
+    window.localStorage.setItem(HIDDEN_DEMO_KEY, JSON.stringify(hiddenIds));
   } catch {
     if (chatSaveStatus) {
       chatSaveStatus.hidden = false;
-      chatSaveStatus.textContent = 'Impossibile eliminare la chat in questo browser';
+      chatSaveStatus.textContent = 'Impossibile nascondere la chat in questo browser';
     }
     return;
   }
-  demoEntry.remove();
-  if (window.location.pathname.endsWith('chat.html') && !selectedChatId) {
+  if (selectedDemoId === demoId && document.querySelector('#archive-transcript')) {
     window.location.href = 'index.html#chat';
+    return;
   }
+  renderHistoryLinks(activeChatId);
 }
 
-try {
-  if (window.localStorage.getItem(HIDDEN_DEMO_KEY) === '1') {
-    historyItems?.querySelector('[data-demo-history]')?.remove();
-  }
-} catch {
-  // The sample chat remains visible if browser storage is unavailable.
-}
-
-document.querySelector('[data-delete-demo]')?.addEventListener('click', deleteDemoChat);
 function renderSelectedChat() {
   const transcript = document.querySelector('#archive-transcript');
-  if (!transcript || !selectedChatId) return;
-  const chat = readChatHistory().find((item) => item.id === selectedChatId);
-  if (!chat) return;
+  if (!transcript) return;
+  const demo = selectedDemoId ? DEMO_CHATS.find((item) => item.id === selectedDemoId) : null;
+  const chat = selectedChatId ? readChatHistory().find((item) => item.id === selectedChatId) : null;
+  const conversation = demo || chat;
+  if (!conversation) return;
 
   const title = document.querySelector('#archive-title');
   const summary = document.querySelector('.archive-summary');
   const eyebrow = document.querySelector('.archive-heading .eyebrow');
-  if (title) title.textContent = chat.title;
-  if (summary) summary.textContent = 'Conversazione salvata in questo browser · ' + chat.turns.length + ' messaggi';
-  if (eyebrow) eyebrow.textContent = 'CHAT PASSATA';
+  const footerCaption = document.querySelector('.archive-footer .footer-caption');
+  if (title) title.textContent = conversation.title;
+  document.title = 'SaraAI — ' + conversation.title;
+  if (summary) {
+    summary.textContent = demo
+      ? demo.summary + ' · ' + demo.turns.length + ' messaggi'
+      : 'Conversazione salvata in questo browser · ' + conversation.turns.length + ' messaggi';
+  }
+  if (eyebrow) eyebrow.textContent = demo ? 'CHAT DEMO' : 'CHAT PASSATA';
+  if (footerCaption) {
+    footerCaption.textContent = demo
+      ? 'Esempio predefinito visibile nella sezione Chat passate'
+      : 'Questa conversazione è salvata solo in questo browser';
+  }
 
-  transcript.setAttribute('aria-label', 'Trascrizione di ' + chat.title);
+  transcript.setAttribute('aria-label', 'Trascrizione di ' + conversation.title);
   transcript.replaceChildren();
-  chat.turns.forEach((turn) => {
+  conversation.turns.forEach((turn) => {
     const item = document.createElement('li');
     item.className = 'transcript-item ' + turn.role;
     const speaker = document.createElement('span');
