@@ -12,7 +12,7 @@ py -m http.server 4173
 
 Poi apri <http://localhost:4173> nel browser. Per fermare il server, premi `Ctrl+C` nella finestra PowerShell.
 
-La chat principale è una stanza pubblica in tempo reale. I messaggi vengono salvati su Supabase e sono visibili a tutti i visitatori; le risposte di SaraAI sono dimostrative e vengono generate nel browser. Le chat personali nella barra laterale restano salvate solo nel browser di chi le crea.
+La chat principale è una stanza pubblica in tempo reale. I messaggi vengono salvati su Supabase e sono visibili a tutti i visitatori; le risposte di SaraAI sono dimostrative e vengono generate nel browser. **Nuova chat** avvia una vista pulita per la sessione corrente, ma i nuovi messaggi inviati restano pubblici. Le chat personali nella barra laterale restano salvate solo nel browser di chi le crea.
 
 ## Configurare Supabase
 

@@ -390,6 +390,28 @@ if (form && promptInput && conversation) {
   const liveChatStatus = document.querySelector('#live-chat-status');
   const renderedLiveMessageIds = new Set();
   const liveMessagesTable = 'saraai_live_messages';
+  const liveChatStartKey = 'saraai.live-chat-started-at';
+  const pageUrl = new URL(window.location.href);
+  let liveChatStartedAt = 0;
+  let startNewChatOnLoad = pageUrl.searchParams.get('new') === '1';
+
+  try {
+    liveChatStartedAt = Number(window.sessionStorage.getItem(liveChatStartKey)) || 0;
+  } catch {
+    // A fresh chat still works for this page load when session storage is unavailable.
+  }
+
+  if (startNewChatOnLoad) {
+    liveChatStartedAt = Date.now() - 1000;
+    try {
+      window.sessionStorage.setItem(liveChatStartKey, String(liveChatStartedAt));
+    } catch {
+      // The URL flag keeps this new-chat request available for this page load.
+    }
+    pageUrl.searchParams.delete('new');
+    window.history.replaceState(null, '', pageUrl.pathname + pageUrl.search + pageUrl.hash);
+  }
+
   const liveConfig = window.SARAAI_SUPABASE_CONFIG;
   const liveChatClient = window.supabase?.createClient && liveConfig?.url && liveConfig?.publishableKey
     ? window.supabase.createClient(liveConfig.url, liveConfig.publishableKey, {
@@ -412,16 +434,22 @@ if (form && promptInput && conversation) {
   function updateLiveChatReady() {
     liveChatReady = liveChatSubscribed && liveHistoryLoaded;
     sendButton.disabled = !liveChatReady || isReplyPending;
-    if (liveChatReady) setLiveChatStatus('Connesso alla chat pubblica', 'connected');
+    if (liveChatReady) {
+      setLiveChatStatus(
+        liveChatStartedAt ? 'Nuova chat pronta · i messaggi sono pubblici' : 'Connesso alla chat pubblica',
+        'connected'
+      );
+    }
   }
 
   function renderLiveMessage(row) {
     if (!row || typeof row.id !== 'string' || renderedLiveMessageIds.has(row.id)) return;
+    const createdAt = Date.parse(row.created_at) || Date.now();
+    if (liveChatStartedAt && createdAt < liveChatStartedAt) return;
     renderedLiveMessageIds.add(row.id);
 
     const message = document.createElement('div');
     message.className = 'chat-message ' + row.role;
-    const createdAt = Date.parse(row.created_at) || Date.now();
     message.dataset.messageId = row.id;
     message.dataset.createdAt = String(createdAt);
 
@@ -549,11 +577,14 @@ if (form && promptInput && conversation) {
         }
       });
 
-    const { data: messages, error } = await liveChatClient
+    let messagesQuery = liveChatClient
       .from(liveMessagesTable)
       .select('id, sender_id, sender_name, role, body, created_at')
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .order('created_at', { ascending: false });
+    if (liveChatStartedAt) {
+      messagesQuery = messagesQuery.gte('created_at', new Date(liveChatStartedAt).toISOString());
+    }
+    const { data: messages, error } = await messagesQuery.limit(100);
 
     if (error) throw error;
     messages.reverse().forEach(renderLiveMessage);
@@ -565,7 +596,7 @@ if (form && promptInput && conversation) {
   connectToLiveChat().catch(() => {
     liveChatReady = false;
     sendButton.disabled = true;
-    setLiveChatStatus('Chat non pronta: controlla SQL Editor e accessi anonimi in Supabase.', 'error');
+    setLiveChatStatus('Per inviare messaggi, abilita gli accessi anonimi e avvia supabase/setup.sql.', 'error');
   });
 
   function saveTurn(role, text) {
@@ -699,11 +730,23 @@ if (form && promptInput && conversation) {
       activeChatId = null;
       setAwaitingManualUltracodeReply(false);
       resetUltracodeQuiz();
+      liveChatStartedAt = Date.now() - 1000;
+      try {
+        window.sessionStorage.setItem(liveChatStartKey, String(liveChatStartedAt));
+      } catch {
+        // The transcript is cleared for this page even if storage is unavailable.
+      }
+      renderedLiveMessageIds.clear();
+      conversation.replaceChildren();
+      conversation.hidden = true;
       renderHistoryLinks(null);
       promptInput.value = '';
       autoSize();
       if (chatSaveStatus) chatSaveStatus.hidden = true;
       window.history.replaceState(null, '', window.location.pathname + '#chat');
+      if (liveChatReady) {
+        setLiveChatStatus('Nuova chat pronta · i messaggi sono pubblici', 'connected');
+      }
       promptInput.focus();
     }
   });
