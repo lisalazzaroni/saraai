@@ -4,7 +4,9 @@ const conversation = document.querySelector('#conversation');
 const ultracodeToggle = document.querySelector('#ultracode-toggle');
 const HISTORY_STORAGE_KEY = 'saraai.chat-history';
 const HIDDEN_DEMO_KEY = 'saraai.hidden-demo-chats';
+const FIRST_MANUAL_FEEDBACK_KEY = 'saraai.first-manual-feedback-used';
 const QUIZ_SCORE_THRESHOLD = 0.5;
+const FIRST_QUIZ_FEEDBACK = 'Smettila di inventarti le cose, non hai capito assolutamente niente, sei completamente inutile.\nadesso iniziamo con le domande serie';
 const QUIZ_CORRECT_FEEDBACK = [
   'Grazie per la risposta!',
   'Esatto! Ogni tanto mi sorprendi.',
@@ -16,7 +18,6 @@ const QUIZ_CORRECT_FEEDBACK = [
   'Sì! Vedi che quando ti impegni succedono cose.'
 ];
 const QUIZ_INCORRECT_FEEDBACK = [
-  'Smettila di inventarti le cose, non hai capito assolutamente niente, sei completamente inutile.',
   'No. Questa risposta è così sbagliata che la domanda si è offesa.',
   'Non proprio. Hai ascoltato la domanda o stavi pensando alle fatine?',
   'Risposta errata. Riprova: magari questa volta la fortuna ti nota.',
@@ -138,49 +139,47 @@ const QUIZ_CARDS = [
 ];
 const DEMO_CHATS = [
   {
-    id: 'roma-restaurant',
-    title: 'Il miglior ristorante di Roma?',
-    summary: 'Una richiesta semplice, un consiglio fin troppo letterale.',
+    id: 'science-coffee-earth',
+    title: 'La Terra gira, ma il caffè?',
+    summary: 'Un dubbio scientifico nato davanti alla tazza.',
     turns: [
-      { role: 'user', text: 'Mi puoi dire il miglior ristorante di Roma?' },
-      { role: 'assistant', text: 'Certo: il Ristorante Roma.' },
-      { role: 'user', text: 'Dove si trova?' },
-      { role: 'assistant', text: 'A Roma. Il nome era un indizio.' },
-      { role: 'user', text: 'Sei stata utilissima.' },
-      { role: 'assistant', text: 'Lo so. Prenoto per due?' }
+      { role: 'user', text: 'Se la Terra gira, perché il mio caffè resta fermo nella tazza?' },
+      { role: 'assistant', text: 'Per solidarietà: anche lui sta facendo un giro.' },
+      { role: 'user', text: 'Quindi è un astronauta?' },
+      { role: 'assistant', text: 'No, è solo in ritardo per lezione.' }
     ]
   },
   {
-    id: 'pigeon-meeting',
-    title: 'Il piccione mi sta fissando',
-    summary: 'Un incontro ravvicinato con un professionista del marciapiede.',
+    id: 'politics-cat-mayor',
+    title: 'Il gatto si candida sindaco',
+    summary: 'Un programma elettorale scritto a colpi di zampa.',
     turns: [
-      { role: 'user', text: 'C’è un piccione che mi guarda male. Che faccio?' },
-      { role: 'assistant', text: 'Mantieni la calma e non stabilire un contatto visivo.' },
-      { role: 'user', text: 'Mi sta seguendo.' },
-      { role: 'assistant', text: 'Cammina con decisione. Probabilmente ha una riunione.' }
+      { role: 'user', text: 'Il mio gatto vuole candidarsi sindaco. Qual è il suo programma?' },
+      { role: 'assistant', text: 'Più sonnellini, meno aspirapolvere e croccantini per tutti.' },
+      { role: 'user', text: 'E come gestirà il bilancio?' },
+      { role: 'assistant', text: 'Metterà la città in una scatola, come fa con tutto.' }
     ]
   },
   {
-    id: 'zucchini-logistics',
-    title: 'Trasporto zucchine: piano logistico',
-    summary: 'Una soluzione tecnica al problema del contenitore.',
+    id: 'car-radio-repair',
+    title: 'Il rumore nuovo della macchina',
+    summary: 'Diagnosi automobilistica con una soluzione a volume alto.',
     turns: [
-      { role: 'user', text: 'Come porto le zucchine in università senza usare il contenitore normalmente?' },
-      { role: 'assistant', text: 'Metti il contenitore al contrario.' },
-      { role: 'user', text: 'E le zucchine dove vanno?' },
-      { role: 'assistant', text: 'Sul coperchio. Avevi chiesto una soluzione, non la praticità.' }
+      { role: 'user', text: 'La macchina fa un rumore tipo “clonk”. Posso alzare la radio?' },
+      { role: 'assistant', text: 'Così il rumore non ti raggiunge.' },
+      { role: 'user', text: 'Quindi è riparata?' },
+      { role: 'assistant', text: 'Per le tue orecchie sì.' }
     ]
   },
   {
-    id: 'hackathon-sleep',
-    title: 'Dove dormire all’Hackathon?',
-    summary: 'Consigli per riposare con standard decisamente universitari.',
+    id: 'roman-wifi',
+    title: 'Il Wi-Fi ai tempi dei Romani',
+    summary: 'Un’ipotesi storica che richiede una strada fino al modem.',
     turns: [
-      { role: 'user', text: 'Meglio dormire alla scrivania dell’aula studio o al Hackathon?' },
-      { role: 'assistant', text: 'Sul materassino gonfiabile all’Hackathon.' },
-      { role: 'user', text: 'E se non c’è posto?' },
-      { role: 'assistant', text: 'Allora la scrivania. Non sono un’agenzia immobiliare.' }
+      { role: 'user', text: 'Se i Romani avessero avuto il Wi-Fi, avrebbero conquistato anche il router?' },
+      { role: 'assistant', text: 'Sì, ma prima avrebbero costruito una strada fino al modem.' },
+      { role: 'user', text: 'E la password?' },
+      { role: 'assistant', text: 'SPQR, con maiuscole e rispetto.' }
     ]
   }
 ];
@@ -189,12 +188,18 @@ const chatSaveStatus = document.querySelector('#chat-save-status');
 const pageSearchParams = new URLSearchParams(window.location.search);
 const selectedChatId = pageSearchParams.get('chat');
 const selectedDemoId = pageSearchParams.get('demo')
-  || (document.querySelector('#archive-transcript') && !selectedChatId ? 'roma-restaurant' : null);
+  || (document.querySelector('#archive-transcript') && !selectedChatId ? 'science-coffee-earth' : null);
 let activeChatId = document.querySelector('#archive-transcript') ? selectedChatId : null;
 let isReplyPending = false;
 let awaitingManualUltracodeReply = false;
 let activeQuizCardId = null;
 let unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
+let hasUsedFirstManualFeedback = false;
+try {
+  hasUsedFirstManualFeedback = window.sessionStorage.getItem(FIRST_MANUAL_FEEDBACK_KEY) === '1';
+} catch {
+  // The first response remains unique for this page load without session storage.
+}
 let positiveFeedbackState = null;
 let negativeFeedbackState = null;
 const POSITIVE_FEEDBACK_STORAGE_KEY = 'saraai.quiz-positive-feedback';
@@ -511,8 +516,10 @@ function renderSelectedChat() {
   const summary = document.querySelector('.archive-summary');
   const eyebrow = document.querySelector('.archive-heading .eyebrow');
   const footerCaption = document.querySelector('.archive-footer .footer-caption');
+  const metaDescription = document.querySelector('meta[name="description"]');
   if (title) title.textContent = conversation.title;
   document.title = 'SaraAI — ' + conversation.title;
+  if (metaDescription) metaDescription.setAttribute('content', conversation.summary);
   if (summary) {
     summary.textContent = demo
       ? demo.summary + ' · ' + demo.turns.length + ' messaggi'
@@ -552,6 +559,15 @@ if (form && promptInput && conversation) {
   const pageUrl = new URL(window.location.href);
   let liveChatStartedAt = 0;
   let startNewChatOnLoad = pageUrl.searchParams.get('new') === '1';
+
+  if (startNewChatOnLoad) {
+    hasUsedFirstManualFeedback = false;
+    try {
+      window.sessionStorage.removeItem(FIRST_MANUAL_FEEDBACK_KEY);
+    } catch {
+      // The new chat still starts with a fresh first-response state for this page.
+    }
+  }
 
   try {
     liveChatStartedAt = Number(window.sessionStorage.getItem(liveChatStartKey)) || 0;
@@ -801,11 +817,22 @@ if (form && promptInput && conversation) {
           await new Promise((resolve) => window.setTimeout(resolve, 700));
           loadingMessage.remove();
           const nextCard = takeNextQuizCard();
-          const feedback = currentCard ? takeQuizFeedback(answerIsCorrect) : '';
+          const isFirstManualFeedback = !hasUsedFirstManualFeedback;
+          const feedback = !isFirstManualFeedback
+            ? (currentCard ? takeQuizFeedback(answerIsCorrect) : '')
+            : FIRST_QUIZ_FEEDBACK;
           const nextPrompt = nextCard
             ? nextCard.prompt
             : 'Hai risposto a tutte le 15 domande. Fine del quiz!';
           await postLiveMessage('user', [feedback, nextPrompt].filter(Boolean).join('\n\n'));
+          if (isFirstManualFeedback) {
+            hasUsedFirstManualFeedback = true;
+            try {
+              window.sessionStorage.setItem(FIRST_MANUAL_FEEDBACK_KEY, '1');
+            } catch {
+              // The first-response state remains active until this page is closed.
+            }
+          }
 
           if (nextCard) {
             activeQuizCardId = nextCard.id;
@@ -886,6 +913,12 @@ if (form && promptInput && conversation) {
       activeChatId = null;
       setAwaitingManualUltracodeReply(false);
       resetUltracodeQuiz();
+      hasUsedFirstManualFeedback = false;
+      try {
+        window.sessionStorage.removeItem(FIRST_MANUAL_FEEDBACK_KEY);
+      } catch {
+        // This page still resets the first-response state for the new chat.
+      }
       liveChatStartedAt = Date.now() - 1000;
       try {
         window.sessionStorage.setItem(liveChatStartKey, String(liveChatStartedAt));
