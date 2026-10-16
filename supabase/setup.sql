@@ -48,13 +48,14 @@ security definer
 set search_path = ''
 as $function$
 begin
+  -- Leave room for the multiple chat events emitted during a full quiz round.
   if exists (
     select 1
     from public.saraai_live_messages as existing
     where existing.sender_id = new.sender_id
       and existing.created_at > pg_catalog.now() - interval '10 seconds'
     group by existing.sender_id
-    having count(*) >= 5
+    having count(*) >= 40
   ) then
     raise exception 'Please wait before sending another message.';
   end if;

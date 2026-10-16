@@ -5,8 +5,26 @@ const ultracodeToggle = document.querySelector('#ultracode-toggle');
 const HISTORY_STORAGE_KEY = 'saraai.chat-history';
 const HIDDEN_DEMO_KEY = 'saraai.hidden-demo-chat';
 const QUIZ_SCORE_THRESHOLD = 0.5;
-const QUIZ_CORRECT_FEEDBACK = 'Grazie per la risposta!';
-const QUIZ_INCORRECT_FEEDBACK = 'Smettila di inventarti le cose, non hai capito assolutamente niente, sei completamente inutile. Ora iniziamo con le domande serie.';
+const QUIZ_CORRECT_FEEDBACK = [
+  'Grazie per la risposta!',
+  'Esatto! Ogni tanto mi sorprendi.',
+  'Risposta corretta. Puoi essere fiera di te per almeno cinque minuti.',
+  'Proprio così. SaraAI approva, per questa volta.',
+  'Ci hai preso in pieno!',
+  'Corretto. Non dirlo in giro, ma hai fatto bene.',
+  'Risposta impeccabile. Mi hai quasi convinta.',
+  'Sì! Vedi che quando ti impegni succedono cose.'
+];
+const QUIZ_INCORRECT_FEEDBACK = [
+  'Smettila di inventarti le cose, non hai capito assolutamente niente, sei completamente inutile.',
+  'No. Questa risposta è così sbagliata che la domanda si è offesa.',
+  'Non proprio. Hai ascoltato la domanda o stavi pensando alle zucchine?',
+  'Risposta errata. Riprova: magari questa volta la fortuna ti nota.',
+  'No, per niente. Persino il piccione sul marciapiede aveva capito.',
+  'Sbagliato. Ho visto previsioni meteo più precise.',
+  'Non ci siamo. Ti concedo un’altra possibilità, cerca di non sprecarla.',
+  'Quasi… no, scherzavo: era completamente sbagliata.'
+];
 const SARA_QA = [
   {
     id: 'speed-at-the-door',
@@ -111,12 +129,6 @@ const SARA_QA = [
   }
 ];
 const QUIZ_CARDS = [
-  {
-    id: 'today-trap',
-    prompt: 'Cosa si festeggia oggi?',
-    alwaysIncorrect: true,
-    keywordGroups: []
-  },
   ...SARA_QA.map(({ id, question, promptAliases, keywordGroups }) => ({
     id,
     prompt: question,
@@ -132,6 +144,8 @@ let isReplyPending = false;
 let awaitingManualUltracodeReply = false;
 let activeQuizCardId = null;
 let unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
+let positiveFeedbackDeck = [];
+let negativeFeedbackDeck = [];
 const defaultPromptPlaceholder = promptInput?.placeholder || 'Chiedimi quello che vuoi…';
 const promptLabel = document.querySelector('label[for="prompt"]');
 const defaultPromptLabel = promptLabel?.textContent || 'Scrivi un messaggio a SaraAI';
@@ -178,7 +192,7 @@ function selectQuizCard(prompt) {
 }
 
 function scoreQuizAnswer(answer, card) {
-  if (!card || card.alwaysIncorrect || !card.keywordGroups.length) return false;
+  if (!card || !card.keywordGroups.length) return false;
   const normalizedAnswer = ` ${normalizeQuizText(answer)} `;
   const matchedGroups = card.keywordGroups.filter((group) =>
     group.some((keyword) => normalizedAnswer.includes(` ${normalizeQuizText(keyword)} `))
@@ -187,17 +201,35 @@ function scoreQuizAnswer(answer, card) {
 }
 
 function takeNextQuizCard() {
-  if (unusedQuizCardIds.length === 0) {
-    unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
-  }
-  const index = Math.floor(Math.random() * unusedQuizCardIds.length);
-  const [nextId] = unusedQuizCardIds.splice(index, 1);
+  if (unusedQuizCardIds.length === 0) return null;
+  const [nextId] = unusedQuizCardIds.splice(0, 1);
   return QUIZ_CARDS.find((card) => card.id === nextId);
+}
+
+function shuffleItems(items) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function takeQuizFeedback(isCorrect) {
+  const phrases = isCorrect ? QUIZ_CORRECT_FEEDBACK : QUIZ_INCORRECT_FEEDBACK;
+  let deck = isCorrect ? positiveFeedbackDeck : negativeFeedbackDeck;
+  if (deck.length === 0) deck = shuffleItems(phrases);
+  const feedback = deck.pop();
+  if (isCorrect) positiveFeedbackDeck = deck;
+  else negativeFeedbackDeck = deck;
+  return feedback;
 }
 
 function resetUltracodeQuiz() {
   activeQuizCardId = null;
   unusedQuizCardIds = QUIZ_CARDS.map((card) => card.id);
+  positiveFeedbackDeck = [];
+  negativeFeedbackDeck = [];
 }
 
 function setAwaitingManualUltracodeReply(awaiting) {
@@ -643,22 +675,20 @@ if (form && promptInput && conversation) {
           await new Promise((resolve) => window.setTimeout(resolve, 700));
           loadingMessage.remove();
           const nextCard = takeNextQuizCard();
-          const combineTrapReactionAndPrompt = Boolean(currentCard?.alwaysIncorrect && nextCard);
-
-          if (currentCard) {
-            const feedback = answerIsCorrect ? QUIZ_CORRECT_FEEDBACK : QUIZ_INCORRECT_FEEDBACK;
-            const reaction = combineTrapReactionAndPrompt
-              ? feedback + '\n\n' + nextCard.prompt
-              : feedback;
-            await postLiveMessage('user', reaction);
-          }
+          const feedback = currentCard ? takeQuizFeedback(answerIsCorrect) : '';
+          const nextPrompt = nextCard
+            ? nextCard.prompt
+            : 'Hai risposto a tutte le 15 domande. Fine del quiz!';
+          await postLiveMessage('user', [feedback, nextPrompt].filter(Boolean).join('\n\n'));
 
           if (nextCard) {
-            if (!combineTrapReactionAndPrompt) {
-              await postLiveMessage('user', nextCard.prompt);
-            }
             activeQuizCardId = nextCard.id;
             setAwaitingManualUltracodeReply(true);
+          } else {
+            activeQuizCardId = null;
+            setAwaitingManualUltracodeReply(false);
+            if (ultracodeToggle) ultracodeToggle.checked = false;
+            resetUltracodeQuiz();
           }
         } else {
           await postLiveMessage('user', text);
