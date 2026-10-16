@@ -123,6 +123,9 @@ h1 span { font-family: var(--serif); font-style: italic; letter-spacing: -.065em
 .demo-indicator { width: 5px; height: 5px; border-radius: 50%; background: #d6ab72; }
 .chat-save-status { margin: 7px 0 0; color: #68764b; font-size: 10px; text-align: center; }
 .chat-save-status[hidden] { display: none; }
+.chat-live-status { margin: 7px 0 0; color: #77776f; font-size: 10px; text-align: center; }
+.chat-live-status.is-error { color: #9b473c; }
+.chat-live-status.is-connected { color: #68764b; }
 .suggestions { max-width: 790px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 18px; }
 .suggestion { min-height: 36px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #e4e4de; border-radius: 99px; background: rgba(255,255,255,.45); color: #686861; font-size: 11px; line-height: 1.35; text-align: left; cursor: pointer; transition: background .18s, border-color .18s, transform .18s; }
 .suggestion span { color: #85876d; font-size: 14px; }

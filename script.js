@@ -32,7 +32,7 @@ const QUIZ_CARDS = [
 const historyItems = document.querySelector('.history-items');
 const chatSaveStatus = document.querySelector('#chat-save-status');
 const selectedChatId = new URLSearchParams(window.location.search).get('chat');
-let activeChatId = selectedChatId;
+let activeChatId = document.querySelector('#archive-transcript') ? selectedChatId : null;
 let isReplyPending = false;
 let awaitingManualUltracodeReply = false;
 let activeQuizCardId = null;
@@ -207,8 +207,6 @@ function deleteSavedChat(chatId) {
     activeChatId = null;
     setAwaitingManualUltracodeReply(false);
     resetUltracodeQuiz();
-    conversation?.replaceChildren();
-    if (conversation) conversation.hidden = true;
     if (promptInput) promptInput.value = '';
     if (chatSaveStatus) chatSaveStatus.hidden = true;
     window.history.replaceState(null, '', window.location.pathname + '#chat');
@@ -280,16 +278,60 @@ renderSelectedChat();
 
 if (form && promptInput && conversation) {
   const sendButton = form.querySelector('button[type="submit"]');
-  function makeMessage(role, text) {
+  const liveChatStatus = document.querySelector('#live-chat-status');
+  const renderedLiveMessageIds = new Set();
+  const liveMessagesTable = 'saraai_live_messages';
+  const liveConfig = window.SARAAI_SUPABASE_CONFIG;
+  const liveChatClient = window.supabase?.createClient && liveConfig?.url && liveConfig?.publishableKey
+    ? window.supabase.createClient(liveConfig.url, liveConfig.publishableKey, {
+        auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false }
+      })
+    : null;
+  let liveChatUser = null;
+  let liveChatName = '';
+  let liveChatReady = false;
+  let liveChatSubscribed = false;
+  let liveHistoryLoaded = false;
+
+  function setLiveChatStatus(text, state = '') {
+    if (!liveChatStatus) return;
+    liveChatStatus.textContent = text;
+    liveChatStatus.classList.toggle('is-error', state === 'error');
+    liveChatStatus.classList.toggle('is-connected', state === 'connected');
+  }
+
+  function updateLiveChatReady() {
+    liveChatReady = liveChatSubscribed && liveHistoryLoaded;
+    sendButton.disabled = !liveChatReady || isReplyPending;
+    if (liveChatReady) setLiveChatStatus('Connesso alla chat pubblica', 'connected');
+  }
+
+  function renderLiveMessage(row) {
+    if (!row || typeof row.id !== 'string' || renderedLiveMessageIds.has(row.id)) return;
+    renderedLiveMessageIds.add(row.id);
+
     const message = document.createElement('div');
-    message.className = 'chat-message ' + role;
+    message.className = 'chat-message ' + row.role;
+    const createdAt = Date.parse(row.created_at) || Date.now();
+    message.dataset.messageId = row.id;
+    message.dataset.createdAt = String(createdAt);
+
     const label = document.createElement('span');
     label.className = 'message-label';
-    label.textContent = role === 'user' ? 'Tu' : 'SaraAI · demo';
+    label.textContent = row.role === 'assistant'
+      ? 'SaraAI · demo'
+      : row.sender_id === liveChatUser?.id
+        ? 'Tu · ' + (row.sender_name || liveChatName)
+        : row.sender_name || 'Visitatore';
+
     const content = document.createElement('span');
-    content.textContent = text;
+    content.textContent = row.body;
     message.append(label, content);
-    conversation.append(message);
+
+    const nextMessage = [...conversation.children].find((item) =>
+      Number(item.dataset.createdAt) > createdAt
+    );
+    conversation.insertBefore(message, nextMessage || null);
     conversation.hidden = false;
     conversation.scrollTop = conversation.scrollHeight;
   }
@@ -334,22 +376,85 @@ if (form && promptInput && conversation) {
     promptInput.style.height = Math.min(promptInput.scrollHeight, 135) + 'px';
   }
 
-  function restoreActiveChat() {
-    if (!activeChatId) return;
-    const chat = readChatHistory().find((item) => item.id === activeChatId);
-    if (!chat) {
-      activeChatId = null;
-      return;
+  async function postLiveMessage(role, text) {
+    if (!liveChatClient || !liveChatUser || !liveChatReady) {
+      throw new Error('La chat pubblica non è connessa.');
     }
-    chat.turns.forEach((turn) => makeMessage(turn.role, turn.text));
-    if (chatSaveStatus) {
-      chatSaveStatus.hidden = false;
-      chatSaveStatus.textContent = 'Chat salvata in Chat passate';
-    }
-    renderHistoryLinks(activeChatId);
+
+    const { data, error } = await liveChatClient
+      .from(liveMessagesTable)
+      .insert({
+        sender_id: liveChatUser.id,
+        sender_name: liveChatName,
+        role,
+        body: text
+      })
+      .select('id, sender_id, sender_name, role, body, created_at')
+      .single();
+
+    if (error) throw error;
+    renderLiveMessage(data);
+    saveTurn(role, text);
+    setLiveChatStatus('Connesso alla chat pubblica', 'connected');
   }
 
-  restoreActiveChat();
+  async function connectToLiveChat() {
+    if (!liveChatClient) {
+      throw new Error('Configura Supabase per attivare la chat pubblica.');
+    }
+
+    setLiveChatStatus('Connessione alla chat pubblica…');
+    const { data: sessionData, error: sessionError } = await liveChatClient.auth.getSession();
+    if (sessionError) throw sessionError;
+
+    let user = sessionData.session?.user || null;
+    if (!user) {
+      const { data, error } = await liveChatClient.auth.signInAnonymously();
+      if (error) throw error;
+      user = data.user;
+    }
+    if (!user) throw new Error('Impossibile avviare la sessione anonima.');
+
+    liveChatUser = user;
+    liveChatName = 'Ospite-' + user.id.replace(/-/g, '').slice(-4).toUpperCase();
+
+    liveChatClient
+      .channel('saraai-live-chat')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: liveMessagesTable
+      }, (payload) => renderLiveMessage(payload.new))
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          liveChatSubscribed = true;
+          updateLiveChatReady();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          liveChatSubscribed = false;
+          liveChatReady = false;
+          sendButton.disabled = true;
+          setLiveChatStatus('Connessione interrotta. Ricarica la pagina per riprovare.', 'error');
+        }
+      });
+
+    const { data: messages, error } = await liveChatClient
+      .from(liveMessagesTable)
+      .select('id, sender_id, sender_name, role, body, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    messages.reverse().forEach(renderLiveMessage);
+    liveHistoryLoaded = true;
+    updateLiveChatReady();
+  }
+
+  sendButton.disabled = true;
+  connectToLiveChat().catch(() => {
+    liveChatReady = false;
+    sendButton.disabled = true;
+    setLiveChatStatus('Chat non pronta: controlla SQL Editor e accessi anonimi in Supabase.', 'error');
+  });
 
   function saveTurn(role, text) {
     const chats = readChatHistory();
@@ -360,9 +465,6 @@ if (form && promptInput && conversation) {
         ? window.crypto.randomUUID()
         : 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       chat = { id: activeChatId, title: text.trim().slice(0, 54), turns: [], updatedAt: Date.now() };
-      const chatUrl = new URL(window.location.href);
-      chatUrl.searchParams.set('chat', activeChatId);
-      window.history.replaceState(null, '', chatUrl.pathname + '?' + chatUrl.searchParams.toString() + '#chat');
     }
     chat.turns.push({ role, text });
     chat.updatedAt = Date.now();
@@ -380,69 +482,68 @@ if (form && promptInput && conversation) {
 
   async function submitPrompt(value) {
     const text = value.trim();
-    if (!text || sendButton.disabled) return;
-    if (ultracodeToggle?.checked) {
-      if (awaitingManualUltracodeReply) {
-        const currentCard = QUIZ_CARDS.find((card) => card.id === activeQuizCardId) || null;
-        const answerIsCorrect = currentCard ? scoreQuizAnswer(text, currentCard) : null;
-        makeMessage('assistant', text);
-        saveTurn('assistant', text);
-        promptInput.value = '';
-        autoSize();
-        sendButton.disabled = true;
-        ultracodeToggle.disabled = true;
-        isReplyPending = true;
-        sendButton.setAttribute('aria-label', 'SaraAI sta preparando il prossimo prompt');
-        const loadingMessage = makeLoadingMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 700));
-        loadingMessage.remove();
-        const nextCard = takeNextQuizCard();
-        const combineTrapReactionAndPrompt = Boolean(currentCard?.alwaysIncorrect && nextCard);
-        if (currentCard) {
-          const feedback = answerIsCorrect ? QUIZ_CORRECT_FEEDBACK : QUIZ_INCORRECT_FEEDBACK;
-          const reaction = combineTrapReactionAndPrompt
-            ? feedback + '\n\n' + nextCard.prompt
-            : feedback;
-          makeMessage('user', reaction);
-          saveTurn('user', reaction);
-        }
-        if (nextCard) {
-          if (!combineTrapReactionAndPrompt) {
-            makeMessage('user', nextCard.prompt);
-            saveTurn('user', nextCard.prompt);
+    if (!text || sendButton.disabled || !liveChatReady) return;
+    isReplyPending = true;
+    sendButton.disabled = true;
+
+    try {
+      if (ultracodeToggle?.checked) {
+        if (awaitingManualUltracodeReply) {
+          const currentCard = QUIZ_CARDS.find((card) => card.id === activeQuizCardId) || null;
+          const answerIsCorrect = currentCard ? scoreQuizAnswer(text, currentCard) : null;
+          await postLiveMessage('assistant', text);
+          promptInput.value = '';
+          autoSize();
+          if (ultracodeToggle) ultracodeToggle.disabled = true;
+          sendButton.setAttribute('aria-label', 'SaraAI sta preparando il prossimo prompt');
+          const loadingMessage = makeLoadingMessage();
+          await new Promise((resolve) => window.setTimeout(resolve, 700));
+          loadingMessage.remove();
+          const nextCard = takeNextQuizCard();
+          const combineTrapReactionAndPrompt = Boolean(currentCard?.alwaysIncorrect && nextCard);
+
+          if (currentCard) {
+            const feedback = answerIsCorrect ? QUIZ_CORRECT_FEEDBACK : QUIZ_INCORRECT_FEEDBACK;
+            const reaction = combineTrapReactionAndPrompt
+              ? feedback + '\n\n' + nextCard.prompt
+              : feedback;
+            await postLiveMessage('user', reaction);
           }
-          activeQuizCardId = nextCard.id;
+
+          if (nextCard) {
+            if (!combineTrapReactionAndPrompt) {
+              await postLiveMessage('user', nextCard.prompt);
+            }
+            activeQuizCardId = nextCard.id;
+            setAwaitingManualUltracodeReply(true);
+          }
+        } else {
+          await postLiveMessage('user', text);
+          selectQuizCard(text);
+          promptInput.value = '';
+          autoSize();
           setAwaitingManualUltracodeReply(true);
         }
-        sendButton.disabled = false;
-        ultracodeToggle.disabled = false;
-        isReplyPending = false;
       } else {
-        makeMessage('user', text);
-        saveTurn('user', text);
-        selectQuizCard(text);
+        await postLiveMessage('user', text);
         promptInput.value = '';
         autoSize();
-        setAwaitingManualUltracodeReply(true);
+        sendButton.setAttribute('aria-label', 'SaraAI sta preparando una risposta');
+        const loadingMessage = makeLoadingMessage();
+        await new Promise((resolve) => window.setTimeout(resolve, 380));
+        loadingMessage.remove();
+        const answer = replyFor(text);
+        await postLiveMessage('assistant', answer);
       }
+    } catch {
+      setLiveChatStatus('Messaggio non inviato. Riprova tra poco.', 'error');
+    } finally {
+      isReplyPending = false;
+      if (ultracodeToggle) ultracodeToggle.disabled = false;
+      sendButton.disabled = !liveChatReady;
+      sendButton.setAttribute('aria-label', awaitingManualUltracodeReply ? 'Invia risposta di SaraAI' : 'Invia messaggio');
       promptInput.focus();
-      return;
     }
-    makeMessage('user', text);
-    saveTurn('user', text);
-    promptInput.value = '';
-    autoSize();
-    sendButton.disabled = true;
-    isReplyPending = true;
-    sendButton.setAttribute('aria-label', 'SaraAI sta preparando una risposta');
-    await new Promise((resolve) => window.setTimeout(resolve, 380));
-    const answer = replyFor(text);
-    makeMessage('assistant', answer);
-    saveTurn('assistant', answer);
-    sendButton.disabled = false;
-    isReplyPending = false;
-    sendButton.setAttribute('aria-label', 'Invia messaggio');
-    promptInput.focus();
   }
 
   form.addEventListener('submit', (event) => {
@@ -486,8 +587,7 @@ if (form && promptInput && conversation) {
       activeChatId = null;
       setAwaitingManualUltracodeReply(false);
       resetUltracodeQuiz();
-      conversation.replaceChildren();
-      conversation.hidden = true;
+      renderHistoryLinks(null);
       promptInput.value = '';
       autoSize();
       if (chatSaveStatus) chatSaveStatus.hidden = true;
