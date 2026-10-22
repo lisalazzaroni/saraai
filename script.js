@@ -554,6 +554,7 @@ if (form && promptInput && conversation) {
   const sendButton = form.querySelector('button[type="submit"]');
   const liveChatStatus = document.querySelector('#live-chat-status');
   const renderedLiveMessageIds = new Set();
+  let pendingTypedMessage = null;
   const liveMessagesTable = 'saraai_live_messages';
   const liveChatStartKey = 'saraai.live-chat-started-at';
   const pageUrl = new URL(window.location.href);
@@ -636,7 +637,11 @@ if (form && promptInput && conversation) {
         : row.sender_name || 'Visitatore';
 
     const content = document.createElement('span');
-    content.textContent = row.body;
+    const shouldType = pendingTypedMessage
+      && row.sender_id === liveChatUser?.id
+      && row.role === pendingTypedMessage.role
+      && row.body === pendingTypedMessage.text;
+    content.textContent = shouldType ? '' : row.body;
     message.append(label, content);
 
     const nextMessage = [...conversation.children].find((item) =>
@@ -645,6 +650,24 @@ if (form && promptInput && conversation) {
     conversation.insertBefore(message, nextMessage || null);
     conversation.hidden = false;
     conversation.scrollTop = conversation.scrollHeight;
+    if (shouldType) pendingTypedMessage.animation = typeMessage(content, row.body);
+  }
+
+  async function typeMessage(content, text) {
+    const characters = Array.from(text);
+    const chunkSize = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? characters.length || 1
+      : Math.max(4, Math.ceil(characters.length / 40));
+    content.parentElement.setAttribute('aria-busy', 'true');
+    for (let end = chunkSize; end < characters.length + chunkSize; end += chunkSize) {
+      if (!content.isConnected) break;
+      content.textContent = characters.slice(0, end).join('');
+      conversation.scrollTop = conversation.scrollHeight;
+      if (end < characters.length) {
+        await new Promise((resolve) => window.setTimeout(resolve, 45));
+      }
+    }
+    content.parentElement.setAttribute('aria-busy', 'false');
   }
 
   function makeLoadingMessage() {
@@ -690,26 +713,32 @@ if (form && promptInput && conversation) {
     promptInput.style.height = Math.min(promptInput.scrollHeight, 135) + 'px';
   }
 
-  async function postLiveMessage(role, text) {
+  async function postLiveMessage(role, text, typeText = false) {
     if (!liveChatClient || !liveChatUser || !liveChatReady) {
       throw new Error('La chat pubblica non è connessa.');
     }
 
-    const { data, error } = await liveChatClient
-      .from(liveMessagesTable)
-      .insert({
-        sender_id: liveChatUser.id,
-        sender_name: liveChatName,
-        role,
-        body: text
-      })
-      .select('id, sender_id, sender_name, role, body, created_at')
-      .single();
+    if (typeText) pendingTypedMessage = { role, text };
+    try {
+      const { data, error } = await liveChatClient
+        .from(liveMessagesTable)
+        .insert({
+          sender_id: liveChatUser.id,
+          sender_name: liveChatName,
+          role,
+          body: text
+        })
+        .select('id, sender_id, sender_name, role, body, created_at')
+        .single();
 
-    if (error) throw error;
-    renderLiveMessage(data);
-    saveTurn(role, text);
-    setLiveChatStatus('Connesso alla chat pubblica', 'connected');
+      if (error) throw error;
+      renderLiveMessage(data);
+      saveTurn(role, text);
+      await pendingTypedMessage?.animation;
+      setLiveChatStatus('Connesso alla chat pubblica', 'connected');
+    } finally {
+      pendingTypedMessage = null;
+    }
   }
 
   async function connectToLiveChat() {
@@ -814,7 +843,7 @@ if (form && promptInput && conversation) {
           if (ultracodeToggle) ultracodeToggle.disabled = true;
           sendButton.setAttribute('aria-label', 'SaraAI sta preparando il prossimo prompt');
           const loadingMessage = makeLoadingMessage();
-          await new Promise((resolve) => window.setTimeout(resolve, 700));
+          await new Promise((resolve) => window.setTimeout(resolve, 900));
           loadingMessage.remove();
           const nextCard = takeNextQuizCard();
           const isFirstManualFeedback = !hasUsedFirstManualFeedback;
@@ -824,7 +853,7 @@ if (form && promptInput && conversation) {
           const nextPrompt = nextCard
             ? nextCard.prompt
             : 'Hai risposto a tutte le 15 domande. Fine del quiz!';
-          await postLiveMessage('user', [feedback, nextPrompt].filter(Boolean).join('\n\n'));
+          await postLiveMessage('user', [feedback, nextPrompt].filter(Boolean).join('\n\n'), true);
           if (isFirstManualFeedback) {
             hasUsedFirstManualFeedback = true;
             try {
@@ -856,10 +885,10 @@ if (form && promptInput && conversation) {
         autoSize();
         sendButton.setAttribute('aria-label', 'SaraAI sta preparando una risposta');
         const loadingMessage = makeLoadingMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 380));
+        await new Promise((resolve) => window.setTimeout(resolve, 650));
         loadingMessage.remove();
         const answer = replyFor(text);
-        await postLiveMessage('assistant', answer);
+        await postLiveMessage('assistant', answer, true);
       }
     } catch {
       setLiveChatStatus('Messaggio non inviato. Riprova tra poco.', 'error');
