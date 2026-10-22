@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync('script.js', 'utf8');
 const helper = source.slice(source.indexOf('  async function typeMessage('), source.indexOf('  function makeLoadingMessage('));
 
-async function check(reducedMotion) {
+async function check(reducedMotion, text) {
   const updates = [];
   const waits = [];
   const attributes = {};
@@ -21,22 +21,26 @@ async function check(reducedMotion) {
     conversation: { scrollTop: 0, scrollHeight: 100 }
   });
   vm.runInContext(helper, context);
-  const text = 'Ciao 👋! Ecco la prossima domanda.';
   await context.typeMessage(content, text);
   assert.equal(updates.at(-1), text);
   assert.equal(attributes['aria-busy'], 'false');
   if (reducedMotion) {
     assert.equal(updates.length, 1);
     assert.equal(waits.length, 0);
-  } else {
-    assert.equal(updates[0], 'Ciao');
+  } else if (text.trim().split(/\s+/).length > 6) {
+    assert.ok(updates[0].trim().split(/\s+/).length >= 4);
     assert.ok(updates.length > 1);
-    assert.ok(waits.every(delay => delay === 45));
+    assert.ok(waits.every(delay => delay >= 120 && delay <= 360));
     assert.ok(updates.every(value => !/[\uD800-\uDBFF]$/.test(value)));
+  } else {
+    assert.equal(updates.length, 1);
+    assert.equal(waits.length, 0);
   }
 }
 (async () => {
-  await check(false);
-  await check(true);
+  for (const text of ['Dopo.', 'Ciao 👋! Ecco la prossima domanda. Prenditi il tuo tempo.\n\nPoi continuiamo insieme.\n']) {
+    await check(false, text);
+    await check(true, text);
+  }
   console.log('Typing checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

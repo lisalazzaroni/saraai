@@ -555,6 +555,7 @@ if (form && promptInput && conversation) {
   const liveChatStatus = document.querySelector('#live-chat-status');
   const renderedLiveMessageIds = new Set();
   let pendingTypedMessage = null;
+  let draftThinkingMessage = null;
   const liveMessagesTable = 'saraai_live_messages';
   const liveChatStartKey = 'saraai.live-chat-started-at';
   const pageUrl = new URL(window.location.href);
@@ -631,7 +632,7 @@ if (form && promptInput && conversation) {
     const label = document.createElement('span');
     label.className = 'message-label';
     label.textContent = row.role === 'assistant'
-      ? 'SaraAI · demo'
+      ? 'SaraAI · demo simulata'
       : row.sender_id === liveChatUser?.id
         ? 'Tu · ' + (row.sender_name || liveChatName)
         : row.sender_name || 'Visitatore';
@@ -654,38 +655,78 @@ if (form && promptInput && conversation) {
   }
 
   async function typeMessage(content, text) {
-    const characters = Array.from(text);
-    const chunkSize = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? characters.length || 1
-      : Math.max(4, Math.ceil(characters.length / 40));
+    const chunks = text.match(/\s*\S+(?:[^\S\n]+\S+){0,5}[^\S\n]*/g) || [];
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     content.parentElement.setAttribute('aria-busy', 'true');
-    for (let end = chunkSize; end < characters.length + chunkSize; end += chunkSize) {
-      if (!content.isConnected) break;
-      content.textContent = characters.slice(0, end).join('');
-      conversation.scrollTop = conversation.scrollHeight;
-      if (end < characters.length) {
-        await new Promise((resolve) => window.setTimeout(resolve, 45));
+    try {
+      if (reducedMotion) {
+        content.textContent = text;
+        return;
       }
+      let end = 0;
+      for (let index = 0; index < chunks.length; index += 1) {
+        if (!content.isConnected) break;
+        end += chunks[index].length;
+        content.textContent = index === chunks.length - 1 ? text : text.slice(0, end);
+        conversation.scrollTop = conversation.scrollHeight;
+        if (index < chunks.length - 1) {
+          const pause = /[.!?:;]\s*$/.test(chunks[index]) ? 140 : 0;
+          await new Promise((resolve) => window.setTimeout(resolve, 120 + Math.random() * 100 + pause));
+        }
+      }
+    } finally {
+      content.parentElement.setAttribute('aria-busy', 'false');
     }
-    content.parentElement.setAttribute('aria-busy', 'false');
   }
 
-  function makeLoadingMessage() {
+  function makeLoadingMessage(role = 'assistant', status = 'Writing…') {
     const message = document.createElement('div');
-    message.className = 'chat-message user chat-loading';
+    message.className = 'chat-message ' + role + ' chat-loading';
     message.setAttribute('role', 'status');
-    message.setAttribute('aria-label', 'Preparazione del prossimo prompt');
     const label = document.createElement('span');
     label.className = 'message-label';
-    label.textContent = 'Tu';
-    const wheel = document.createElement('span');
-    wheel.className = 'loading-wheel';
-    wheel.setAttribute('aria-hidden', 'true');
-    message.append(label, wheel);
+    label.textContent = role === 'assistant' ? 'SaraAI · demo simulata' : 'Tu';
+    const thinking = document.createElement('span');
+    thinking.textContent = status;
+    const dots = document.createElement('span');
+    dots.className = 'thinking-dots';
+    dots.setAttribute('aria-hidden', 'true');
+    for (let index = 0; index < 3; index += 1) {
+      dots.append(document.createElement('i'));
+    }
+    message.append(label, thinking, dots);
     conversation.append(message);
     conversation.hidden = false;
     conversation.scrollTop = conversation.scrollHeight;
     return message;
+  }
+
+  function updateDraftThinking() {
+    const showThinking = !isReplyPending
+      && (promptInput.value.trim() || awaitingManualUltracodeReply);
+    if (!showThinking) {
+      draftThinkingMessage?.remove();
+      draftThinkingMessage = null;
+      if (!conversation.children.length) conversation.hidden = true;
+      return;
+    }
+    const role = awaitingManualUltracodeReply ? 'assistant' : 'user';
+    if (draftThinkingMessage?.classList.contains(role)) return;
+    draftThinkingMessage?.remove();
+    draftThinkingMessage = makeLoadingMessage(role, 'Thinking…');
+    draftThinkingMessage.classList.add('draft-thinking');
+  }
+
+  async function simulateReply(role, text) {
+    await new Promise((resolve) => window.setTimeout(resolve, 500 + Math.random() * 300));
+    const loadingMessage = makeLoadingMessage(role);
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 300 + Math.min(text.length * 2, 500)));
+      loadingMessage.remove();
+      await postLiveMessage(role, text, true);
+    } finally {
+      loadingMessage.remove();
+    }
   }
 
   function replyFor(prompt) {
@@ -719,10 +760,14 @@ if (form && promptInput && conversation) {
     }
 
     if (typeText) pendingTypedMessage = { role, text };
+    const id = window.crypto.randomUUID();
+    renderLiveMessage({ id, role, body: text, sender_id: liveChatUser.id,
+      sender_name: liveChatName, created_at: new Date().toISOString() });
     try {
       const { data, error } = await liveChatClient
         .from(liveMessagesTable)
         .insert({
+          id,
           sender_id: liveChatUser.id,
           sender_name: liveChatName,
           role,
@@ -736,6 +781,11 @@ if (form && promptInput && conversation) {
       saveTurn(role, text);
       await pendingTypedMessage?.animation;
       setLiveChatStatus('Connesso alla chat pubblica', 'connected');
+    } catch (error) {
+      await pendingTypedMessage?.animation;
+      conversation.querySelector('[data-message-id="' + id + '"]')?.remove();
+      renderedLiveMessageIds.delete(id);
+      throw error;
     } finally {
       pendingTypedMessage = null;
     }
@@ -830,7 +880,11 @@ if (form && promptInput && conversation) {
     const text = value.trim();
     if (!text || sendButton.disabled || !liveChatReady) return;
     isReplyPending = true;
+    updateDraftThinking();
     sendButton.disabled = true;
+    if (ultracodeToggle) ultracodeToggle.disabled = true;
+    promptInput.value = '';
+    autoSize();
 
     try {
       if (ultracodeToggle?.checked) {
@@ -842,9 +896,6 @@ if (form && promptInput && conversation) {
           autoSize();
           if (ultracodeToggle) ultracodeToggle.disabled = true;
           sendButton.setAttribute('aria-label', 'SaraAI sta preparando il prossimo prompt');
-          const loadingMessage = makeLoadingMessage();
-          await new Promise((resolve) => window.setTimeout(resolve, 900));
-          loadingMessage.remove();
           const nextCard = takeNextQuizCard();
           const isFirstManualFeedback = !hasUsedFirstManualFeedback;
           const feedback = !isFirstManualFeedback
@@ -853,7 +904,7 @@ if (form && promptInput && conversation) {
           const nextPrompt = nextCard
             ? nextCard.prompt
             : 'Hai risposto a tutte le 15 domande. Fine del quiz!';
-          await postLiveMessage('user', [feedback, nextPrompt].filter(Boolean).join('\n\n'), true);
+          await simulateReply('user', [feedback, nextPrompt].filter(Boolean).join('\n\n'));
           if (isFirstManualFeedback) {
             hasUsedFirstManualFeedback = true;
             try {
@@ -884,11 +935,7 @@ if (form && promptInput && conversation) {
         promptInput.value = '';
         autoSize();
         sendButton.setAttribute('aria-label', 'SaraAI sta preparando una risposta');
-        const loadingMessage = makeLoadingMessage();
-        await new Promise((resolve) => window.setTimeout(resolve, 650));
-        loadingMessage.remove();
-        const answer = replyFor(text);
-        await postLiveMessage('assistant', answer, true);
+        await simulateReply('assistant', replyFor(text));
       }
     } catch {
       setLiveChatStatus('Messaggio non inviato. Riprova tra poco.', 'error');
@@ -897,6 +944,7 @@ if (form && promptInput && conversation) {
       if (ultracodeToggle) ultracodeToggle.disabled = false;
       sendButton.disabled = !liveChatReady;
       sendButton.setAttribute('aria-label', awaitingManualUltracodeReply ? 'Invia risposta di SaraAI' : 'Invia messaggio');
+      updateDraftThinking();
       promptInput.focus();
     }
   }
@@ -911,9 +959,13 @@ if (form && promptInput && conversation) {
       setAwaitingManualUltracodeReply(false);
       resetUltracodeQuiz();
     }
+    updateDraftThinking();
   });
 
-  promptInput.addEventListener('input', autoSize);
+  promptInput.addEventListener('input', () => {
+    autoSize();
+    updateDraftThinking();
+  });
   promptInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -956,6 +1008,7 @@ if (form && promptInput && conversation) {
       }
       renderedLiveMessageIds.clear();
       conversation.replaceChildren();
+      draftThinkingMessage = null;
       conversation.hidden = true;
       renderHistoryLinks(null);
       promptInput.value = '';
