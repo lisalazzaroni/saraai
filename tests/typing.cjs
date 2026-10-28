@@ -38,6 +38,28 @@ async function check(reducedMotion, text) {
   }
 }
 (async () => {
+  const draftHelper = source.slice(source.indexOf('  function updateDraftThinking('), source.indexOf('  async function simulateReply('));
+  for (const [activeChatId, awaitingManualUltracodeReply, expected] of [
+    [null, false, 'Writing…'],
+    ['existing-chat', false, 'Thinking…'],
+    ['existing-chat', true, 'Thinking…'],
+    [null, true, 'Thinking…']
+  ]) {
+    let actual;
+    const context = vm.createContext({
+      activeChatId, awaitingManualUltracodeReply,
+      isReplyPending: false, promptInput: { value: 'A draft' },
+      draftThinkingMessage: null,
+      makeLoadingMessage: (role, status) => {
+        actual = { role, status };
+        return { classList: { add() {} } };
+      }
+    });
+    vm.runInContext(draftHelper, context);
+    context.updateDraftThinking();
+    assert.equal(actual.status, expected);
+    assert.equal(actual.role, awaitingManualUltracodeReply ? 'assistant' : 'user');
+  }
   for (const text of ['Dopo.', 'Ciao 👋! Ecco la prossima domanda. Prenditi il tuo tempo.\n\nPoi continuiamo insieme.\n']) {
     await check(false, text);
     await check(true, text);

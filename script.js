@@ -560,16 +560,7 @@ if (form && promptInput && conversation) {
   const liveChatStartKey = 'saraai.live-chat-started-at';
   const pageUrl = new URL(window.location.href);
   let liveChatStartedAt = 0;
-  let startNewChatOnLoad = pageUrl.searchParams.get('new') === '1';
-
-  if (startNewChatOnLoad) {
-    hasUsedFirstManualFeedback = false;
-    try {
-      window.sessionStorage.removeItem(FIRST_MANUAL_FEEDBACK_KEY);
-    } catch {
-      // The new chat still starts with a fresh first-response state for this page.
-    }
-  }
+  const startNewChatOnLoad = pageUrl.searchParams.get('new') === '1';
 
   try {
     liveChatStartedAt = Number(window.sessionStorage.getItem(liveChatStartKey)) || 0;
@@ -577,23 +568,8 @@ if (form && promptInput && conversation) {
     // A fresh chat still works for this page load when session storage is unavailable.
   }
 
-  if (startNewChatOnLoad) {
-    liveChatStartedAt = Date.now() - 1000;
-    try {
-      window.sessionStorage.setItem(liveChatStartKey, String(liveChatStartedAt));
-    } catch {
-      // The URL flag keeps this new-chat request available for this page load.
-    }
-    pageUrl.searchParams.delete('new');
-    window.history.replaceState(null, '', pageUrl.pathname + pageUrl.search + pageUrl.hash);
-  }
-
-  const liveConfig = window.SARAAI_SUPABASE_CONFIG;
-  const liveChatClient = window.supabase?.createClient && liveConfig?.url && liveConfig?.publishableKey
-    ? window.supabase.createClient(liveConfig.url, liveConfig.publishableKey, {
-        auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false }
-      })
-    : null;
+  const chatAccess = window.SARAAI_CHAT_ACCESS;
+  const liveChatClient = chatAccess?.client;
   let liveChatUser = null;
   let liveChatName = '';
   let liveChatReady = false;
@@ -612,7 +588,7 @@ if (form && promptInput && conversation) {
     sendButton.disabled = !liveChatReady || isReplyPending;
     if (liveChatReady) {
       setLiveChatStatus(
-        liveChatStartedAt ? 'Nuova chat pronta · i messaggi sono pubblici' : 'Connesso alla chat pubblica',
+        'Chat pubblica · lettura libera, password per scrivere',
         'connected'
       );
     }
@@ -713,7 +689,7 @@ if (form && promptInput && conversation) {
     const role = awaitingManualUltracodeReply ? 'assistant' : 'user';
     if (draftThinkingMessage?.classList.contains(role)) return;
     draftThinkingMessage?.remove();
-    draftThinkingMessage = makeLoadingMessage(role, 'Thinking…');
+    draftThinkingMessage = makeLoadingMessage(role, role === 'user' && !activeChatId ? 'Writing…' : 'Thinking…');
     draftThinkingMessage.classList.add('draft-thinking');
   }
 
@@ -800,16 +776,8 @@ if (form && promptInput && conversation) {
     const { data: sessionData, error: sessionError } = await liveChatClient.auth.getSession();
     if (sessionError) throw sessionError;
 
-    let user = sessionData.session?.user || null;
-    if (!user) {
-      const { data, error } = await liveChatClient.auth.signInAnonymously();
-      if (error) throw error;
-      user = data.user;
-    }
-    if (!user) throw new Error('Impossibile avviare la sessione anonima.');
-
-    liveChatUser = user;
-    liveChatName = 'Ospite-' + user.id.replace(/-/g, '').slice(-4).toUpperCase();
+    liveChatUser = sessionData.session?.user || null;
+    liveChatName = liveChatUser ? 'Ospite-' + liveChatUser.id.replace(/-/g, '').slice(-4).toUpperCase() : '';
 
     liveChatClient
       .channel('saraai-live-chat')
@@ -849,7 +817,7 @@ if (form && promptInput && conversation) {
   connectToLiveChat().catch(() => {
     liveChatReady = false;
     sendButton.disabled = true;
-    setLiveChatStatus('Per inviare messaggi, abilita gli accessi anonimi e avvia supabase/setup.sql.', 'error');
+    setLiveChatStatus('Chat non disponibile. Ricarica la pagina per riprovare.', 'error');
   });
 
   function saveTurn(role, text) {
@@ -879,6 +847,13 @@ if (form && promptInput && conversation) {
   async function submitPrompt(value) {
     const text = value.trim();
     if (!text || sendButton.disabled || !liveChatReady) return;
+    if (!await chatAccess.ensureWriter()) return;
+    if (isReplyPending || !liveChatReady) return;
+    const { data, error } = await liveChatClient.auth.getSession();
+    if (error || !data.session?.user) return;
+    if (isReplyPending || !liveChatReady) return;
+    liveChatUser = data.session.user;
+    liveChatName = 'Ospite-' + liveChatUser.id.replace(/-/g, '').slice(-4).toUpperCase();
     isReplyPending = true;
     updateDraftThinking();
     sendButton.disabled = true;
@@ -980,47 +955,58 @@ if (form && promptInput && conversation) {
     });
   });
 
-  document.querySelector('.sidebar-new-chat')?.addEventListener('click', (event) => {
-    const path = window.location.pathname;
-    if (path.endsWith('index.html') || path.endsWith('/')) {
-      event.preventDefault();
-      if (isReplyPending) {
-        if (chatSaveStatus) {
-          chatSaveStatus.hidden = false;
-          chatSaveStatus.textContent = 'Attendi la risposta prima di iniziare una nuova chat';
-        }
-        return;
+  async function startNewChat() {
+    if (isReplyPending) {
+      if (chatSaveStatus) {
+        chatSaveStatus.hidden = false;
+        chatSaveStatus.textContent = 'Attendi la risposta prima di iniziare una nuova chat';
       }
-      activeChatId = null;
-      setAwaitingManualUltracodeReply(false);
-      resetUltracodeQuiz();
-      hasUsedFirstManualFeedback = false;
-      try {
-        window.sessionStorage.removeItem(FIRST_MANUAL_FEEDBACK_KEY);
-      } catch {
-        // This page still resets the first-response state for the new chat.
-      }
-      liveChatStartedAt = Date.now() - 1000;
-      try {
-        window.sessionStorage.setItem(liveChatStartKey, String(liveChatStartedAt));
-      } catch {
-        // The transcript is cleared for this page even if storage is unavailable.
-      }
-      renderedLiveMessageIds.clear();
-      conversation.replaceChildren();
-      draftThinkingMessage = null;
-      conversation.hidden = true;
-      renderHistoryLinks(null);
-      promptInput.value = '';
-      autoSize();
-      if (chatSaveStatus) chatSaveStatus.hidden = true;
-      window.history.replaceState(null, '', window.location.pathname + '#chat');
-      if (liveChatReady) {
-        setLiveChatStatus('Nuova chat pronta · i messaggi sono pubblici', 'connected');
-      }
-      promptInput.focus();
+      return;
     }
+    if (!await chatAccess.ensureWriter()) return;
+    if (isReplyPending) return;
+    activeChatId = null;
+    setAwaitingManualUltracodeReply(false);
+    resetUltracodeQuiz();
+    hasUsedFirstManualFeedback = false;
+    try {
+      window.sessionStorage.removeItem(FIRST_MANUAL_FEEDBACK_KEY);
+    } catch {
+      // This page still resets the first-response state for the new chat.
+    }
+    liveChatStartedAt = Date.now() - 1000;
+    try {
+      window.sessionStorage.setItem(liveChatStartKey, String(liveChatStartedAt));
+    } catch {
+      // The transcript is cleared for this page even if storage is unavailable.
+    }
+    renderedLiveMessageIds.clear();
+    conversation.replaceChildren();
+    draftThinkingMessage = null;
+    conversation.hidden = true;
+    renderHistoryLinks(null);
+    promptInput.value = '';
+    autoSize();
+    if (chatSaveStatus) chatSaveStatus.hidden = true;
+    window.history.replaceState(null, '', window.location.pathname + '#chat');
+    if (liveChatReady) {
+      setLiveChatStatus('Nuova chat pronta · i messaggi sono pubblici', 'connected');
+    }
+    promptInput.focus();
+  }
+
+  document.querySelectorAll('a[href*="new=1"]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      startNewChat();
+    });
   });
+
+  if (startNewChatOnLoad) {
+    pageUrl.searchParams.delete('new');
+    window.history.replaceState(null, '', pageUrl.pathname + pageUrl.search + pageUrl.hash);
+    startNewChat();
+  }
 }
 
 const sidebarToggle = document.querySelector('#sidebar-toggle');
