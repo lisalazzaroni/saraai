@@ -22,9 +22,9 @@
       dialog.setAttribute('aria-describedby', 'chat-access-description');
       dialog.innerHTML = `
         <form class="chat-access-form">
-          <p class="eyebrow">UN PICCOLO PASSAGGIO</p>
+          <p class="eyebrow">voleeeevi eh? </p>
           <h2 id="chat-access-title">Entra nella chat</h2>
-          <p id="chat-access-description">Per scrivere o iniziare una nuova chat, inserisci la password del gruppo. Puoi sempre leggere senza password.</p>
+          <p id="chat-access-description">Per scrivere o iniziare una nuova chat, inserisci la password sono in media 2,26*10^19 tentativi. Puoi sempre leggere senza password.</p>
           <label for="chat-password">Password del gruppo</label>
           <input id="chat-password" type="password" autocomplete="current-password" maxlength="72" required autofocus />
           <p class="chat-access-error" role="alert"></p>
